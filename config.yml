@@ -1,0 +1,8 @@
+# platform: MTP-竞价撮合平台, ATP-综合业务平台, DTP-期权业务平台, ITP-港股通平台
+monitor_files:
+  - platform: MTP
+    files:
+      - d:/<status file path>/ASHR_status.txt
+  - platform: ATP
+    files:
+      - d:/<status file path>/EzSTEP_status.txt
