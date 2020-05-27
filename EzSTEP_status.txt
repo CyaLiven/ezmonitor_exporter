@@ -1,0 +1,26 @@
+[OESStatus]
+StartMode = 1
+OESVersion = 2040200
+OESType = ASHR
+OperatorTotal = 1
+WarningLevel = 3
+
+[OperatorStatus.1]
+Operator = 12345600001
+Status = 1
+Work = ����
+CSIP = 127.0.0.1
+LocalIP = 127.0.0.1
+OrdNumSubmitted = 0
+OrdNumConfirmed = 0
+TradeNumber = 0
+Capability = 10/0
+ProcessRate = 0
+MaxOrderNumber = 0
+WarningLevel = 3
+
+[NOTICE]
+Content = 
+
+[TIME]
+Time = 20200505 059:55:05,555
