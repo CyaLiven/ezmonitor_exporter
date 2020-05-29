@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -22,7 +23,24 @@ import (
 const (
 	// metric的前缀名
 	namespace = "ezmonitor"
+
+	// 距离上次成功获取Time后2秒内再次运行则不判断更新时间是否变化
+	interval = 2 * time.Second
 )
+
+// UpdateTime 记录monitor程序写入时间和exporter最后一次成功运行的时间
+type UpdateTime struct {
+	SuccessRunTime time.Time
+	LastWriteTime  string
+}
+
+func (u *UpdateTime) ignoreCheckTime() bool {
+	currentTime := time.Now()
+	if currentTime.Sub(u.SuccessRunTime) <= interval {
+		return true
+	}
+	return false
+}
 
 var (
 	// platform: MTP-竞价撮合平台, ATP-综合业务平台, DTP-期权业务平台, ITP-港股通平台
@@ -31,7 +49,7 @@ var (
 	ezOptLabelNames   = []string{"server", "platform", "type", "pbu"}
 
 	// 以监控文件名为key，记录最后更新时间
-	lastUpdateTime = make(map[string]string)
+	lastUpdateTime = make(map[string]UpdateTime)
 )
 
 // newEZStatusMetric 读取监控文件中oesstatus段的内容
@@ -120,7 +138,7 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
 		for _, statusFile := range statusFiles {
 			Sections, err := getSections(statusFile)
 			if err != nil {
-				fmt.Printf("%s\n", err)
+				fmt.Printf("error [%s]: %s\n", statusFile, err)
 				continue
 			}
 
@@ -175,22 +193,32 @@ func (e *Exporter) parseOptStatusSection(section *ini.Section, platform string, 
 }
 
 func (e *Exporter) parseEZTimeSection(section *ini.Section, platform string, oesType string, ch chan<- prometheus.Metric, statusFile string) bool {
-	var upFlag bool
 	var value float64
-	updateTime := section.Key("Time").String()
+	var updateTime UpdateTime
 
-	if updateTime != lastUpdateTime[statusFile] {
-		lastUpdateTime[statusFile] = updateTime
-		upFlag = true
-	}
+	monitorUpdateTime := section.Key("Time").String()
+	updateTime = lastUpdateTime[statusFile]
 
-	if upFlag {
+	if updateTime.ignoreCheckTime() {
 		value = 1
+	} else {
+		if monitorUpdateTime != updateTime.LastWriteTime {
+			value = 1
+			updateTime.LastWriteTime = monitorUpdateTime
+			updateTime.SuccessRunTime = time.Now()
+			lastUpdateTime[statusFile] = updateTime
+			fmt.Printf("update[%s] updatetime:%s\n", statusFile, monitorUpdateTime)
+		} else {
+			fmt.Printf("error[%s] lastupdate:%s updatetime:%s\n", statusFile, lastUpdateTime[statusFile], updateTime)
+		}
 	}
 
 	ch <- prometheus.MustNewConstMetric(ezUp, prometheus.GaugeValue, value, e.ipAddr, platform, oesType)
 
-	return upFlag
+	if value == 1 {
+		return true
+	}
+	return false
 }
 
 func getCapabilityValue(capability string) float64 {
@@ -306,5 +334,6 @@ func main() {
 	    </html>`))
 	})
 
+	fmt.Printf("Run at %s\n", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
