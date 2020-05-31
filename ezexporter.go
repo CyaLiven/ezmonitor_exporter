@@ -326,9 +326,9 @@ func main() {
 	))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
-	    <head><title>Dummy Exporter</title></head>
+	    <head><title>ezmonitor Exporter</title></head>
 	    <body>
-	    <h1>Dummy Exporter</h1>
+	    <h1>ezmonitor Exporter</h1>
 	    <p><a href='` + metricsPath + `'>Metrics</a></p>
 	    </body>
 	    </html>`))
