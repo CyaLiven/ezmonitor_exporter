@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v2"
 )
@@ -50,6 +53,14 @@ var (
 
 	// 以监控文件名为key，记录最后更新时间
 	lastUpdateTime = make(map[string]UpdateTime)
+
+	// work状态转换规则
+	workMap = map[string]float64{
+		"开市":   1,
+		"等待开市": 2,
+		"已闭市":  3,
+		"可停止":  4,
+	}
 )
 
 // newEZStatusMetric 读取监控文件中oesstatus段的内容
@@ -73,6 +84,7 @@ var (
 	ezOptMetrics = metrics{
 		"WarningLevel":    newEZOptMetric("warning_level", "operator status.", nil),
 		"Status":          newEZOptMetric("pbu_status", "pbu status.", nil),
+		"Work":            newEZOptMetric("pbu_work", "pbu work status.", nil),
 		"OrdNumSubmitted": newEZOptMetric("order_submit", "order submit number.", nil),
 		"OrdNumConfirmed": newEZOptMetric("order_confirmed", "order submit  confirmed number.", nil),
 		"TradeNumber":     newEZOptMetric("trade", "trade number.", nil),
@@ -181,9 +193,10 @@ func (e *Exporter) parseOptStatusSection(section *ini.Section, platform string, 
 	operatorFullName := section.Key("Operator").String()
 	pbu := operatorFullName[0:5]
 	for metric := range ezOptMetrics {
-		// 在EzStep中Capability需特殊处理，格式为 20/0
-		if metric == "Capability" && platform != "MTP" {
+		if metric == "Capability" && platform != "MTP" { // 在EzStep中Capability需特殊处理，格式为 20/0
 			value = getCapabilityValue(section.Key(metric).String())
+		} else if metric == "Work" { // 将Work字段中的内容转化为类型为float64的值
+			value = transformWorkToValue(section.Key(metric).String())
 		} else {
 			value, _ = section.Key(metric).Float64()
 		}
@@ -225,6 +238,16 @@ func getCapabilityValue(capability string) float64 {
 	valueString := strings.Split(capability, "/")[0]
 	value, _ := strconv.ParseFloat(valueString, 64)
 	return value
+}
+
+func transformWorkToValue(s string) float64 {
+	work := []byte(s)
+	reader := transform.NewReader(bytes.NewReader(work), simplifiedchinese.GBK.NewDecoder())
+	workUTF8, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return 0
+	}
+	return workMap[string(workUTF8)]
 }
 
 func getIPAddr() (string, error) {
